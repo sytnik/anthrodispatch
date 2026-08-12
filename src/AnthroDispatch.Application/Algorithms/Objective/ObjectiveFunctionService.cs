@@ -22,6 +22,7 @@ public sealed class ObjectiveFunctionService(
         var fPsych = FpsychCalculator.Calculate(timetable, disciplines, compatibilities, groups, healthLimitations,
             instructorConstraints);
         var fCogn = FcognCalculator.Calculate(timetable, compatibilities);
+        var cInterf = CInterfCalculator.Calculate(timetable, compatibilities);
         var f = weights.Tech * fTech + weights.Circ * fCirc + weights.Psych * fPsych + weights.Cogn * fCogn;
         var conflicts = FtechCalculator.CountConflicts(timetable, rooms, instructors, assignments, groups,
             instructorConstraints, healthLimitations);
@@ -32,6 +33,7 @@ public sealed class ObjectiveFunctionService(
             FCirc = fCirc,
             FPsych = fPsych,
             FCogn = fCogn,
+            CInterf = cInterf,
             F = f,
             Conflicts = conflicts
         };

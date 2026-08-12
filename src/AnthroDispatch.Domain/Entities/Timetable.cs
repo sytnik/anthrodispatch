@@ -37,6 +37,7 @@ public sealed class Timetable
             {
                 FTech = Metrics.FTech, FCirc = Metrics.FCirc,
                 FPsych = Metrics.FPsych, FCogn = Metrics.FCogn,
+                CInterf = Metrics.CInterf,
                 F = Metrics.F, Conflicts = Metrics.Conflicts,
                 Satisfaction = Metrics.Satisfaction
             };

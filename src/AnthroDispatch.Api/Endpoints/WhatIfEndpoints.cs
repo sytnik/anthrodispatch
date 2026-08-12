@@ -1,4 +1,5 @@
 ﻿using System.Text.Json;
+using AnthroDispatch.Application.Algorithms.Explanation;
 using AnthroDispatch.Application.Algorithms.Objective;
 using AnthroDispatch.Application.Algorithms.Repair;
 using AnthroDispatch.Application.Algorithms.WhatIf;
@@ -176,20 +177,24 @@ public static class WhatIfEndpoints
         return (svc, weights, timetable);
     }
 
-    private static object ToResponse(WhatIfResult r) => new
+    private static object ToResponse(WhatIfResult r)
     {
-        scenarioId = r.ScenarioId,
-        deltaF = r.DeltaF,
-        fDynamic = r.FDynamic,
-        changedClasses = r.ChangedClasses,
-        riskBefore = r.OriginalMetrics.FTech < 1
-            ? 0.3 * (1 - r.OriginalMetrics.FTech) + 0.3 * (1 - r.OriginalMetrics.FPsych) +
-              0.25 * (1 - r.OriginalMetrics.FCogn)
-            : 0.3 * (1 - r.OriginalMetrics.FPsych) + 0.25 * (1 - r.OriginalMetrics.FCogn),
-        riskAfter = r.CandidateMetrics.FTech < 1
-            ? 0.3 * (1 - r.CandidateMetrics.FTech) + 0.3 * (1 - r.CandidateMetrics.FPsych) +
-              0.25 * (1 - r.CandidateMetrics.FCogn)
-            : 0.3 * (1 - r.CandidateMetrics.FPsych) + 0.25 * (1 - r.CandidateMetrics.FCogn),
-        explanation = r.Explanation
-    };
+        // Reuse the canonical Risk(x) formula (RiskModelService, §2.4) instead
+        // of re-deriving it here — an earlier inline copy diverged from it
+        // (used 1-FCogn instead of C_interf and dropped the Rchange term).
+        var fStable = RiskModelService.FStable(r.Candidate, r.Original);
+        var riskBefore = RiskModelService.Calculate(r.OriginalMetrics);
+        var riskAfter = RiskModelService.Calculate(r.CandidateMetrics, fStable);
+
+        return new
+        {
+            scenarioId = r.ScenarioId,
+            deltaF = r.DeltaF,
+            fDynamic = r.FDynamic,
+            changedClasses = r.ChangedClasses,
+            riskBefore,
+            riskAfter,
+            explanation = r.Explanation
+        };
+    }
 }

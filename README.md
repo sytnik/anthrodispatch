@@ -127,19 +127,24 @@ AMD            0.64     0.84     22.8             38.4             0.029
 dotnet test
 ```
 
-All **52 tests** should pass. Test breakdown by fixture:
+All **105 tests** should pass. Test breakdown by fixture:
 
-| Fixture                          | Tests | Coverage area                                                                                                                         |
-|----------------------------------|-------|---------------------------------------------------------------------------------------------------------------------------------------|
-| `AlgorithmTests`                 | 6     | BaselineGA, AMD improvement, repair, AWM slot preference, CPC day-block structure                                                     |
-| `AnthroDispatchGeneratorTests`   | 8     | Curriculum plans, calendar terms, plan items, learning assignments, prerequisite edges, constraints, age/health profiles, determinism |
-| `CircadianActivityTests`         | 1     | Circadian activity peak correctness                                                                                                   |
-| `ConflictDetectorTests`          | 9     | All 7 conflict types + multi-group/multi-instructor dispatch conflicts                                                                |
-| `DispatchInputBuilderTests`      | 9     | Dataset→DispatchProblem conversion, lab splitting, compatibility matrix, constraint attachment, room capacity validation              |
-| `ExtendedObjectiveFunctionTests` | 5     | Age-aware circadian correction, age modifier clamping, health constraint penalties, soft instructor preference, metric bounds         |
-| `MockDatasetGeneratorTests`      | 3     | Determinism, count verification, compatibility score bounds                                                                           |
-| `ObjectiveFunctionTests`         | 4     | Objective function component correctness                                                                                              |
-| `ApiSmokeTests`                  | 5     | Health, dataset generation, optimization run, explanation, what-if scenario                                                           |
+| Fixture                            | Tests | Coverage area                                                                                                                         |
+|-------------------------------------|-------|---------------------------------------------------------------------------------------------------------------------------------------|
+| `ExplanationServiceTests`          | 23    | ExplainClass reasons/conflicts/compatibility/trade-offs, ExplainTimetable strengths/weaknesses/recommendations, ComputeExplainability |
+| `RiskModelServiceTests`            | 11    | Risk(x) weighted-sum formula (perfect/worst/no-fStable/C_interf cases), FStable stability score                                       |
+| `ConflictDetectorTests`            | 9     | All 7 conflict types + multi-group/multi-instructor dispatch conflicts                                                                |
+| `DispatchInputBuilderTests`        | 9     | Dataset→DispatchProblem conversion, lab splitting, compatibility matrix, constraint attachment, room capacity validation              |
+| `AlgorithmTests`                   | 8     | BaselineGA, AMD improvement, repair, AWM slot preference, CPC day-block structure                                                     |
+| `AnthroDispatchGeneratorTests`     | 8     | Curriculum plans, calendar terms, plan items, learning assignments, prerequisite edges, constraints, age/health profiles, determinism |
+| `ApiSmokeTests`                    | 7     | Health, dataset generation, optimization run, candidates, conformance, explanation, what-if scenario                                  |
+| `CircadianActivityTests`           | 6     | Circadian activity peak correctness, age modifier clamping                                                                            |
+| `ExtendedObjectiveFunctionTests`   | 5     | Age-aware circadian correction, age modifier clamping, health constraint penalties, soft instructor preference, metric bounds         |
+| `ScoreIaServiceTests`              | 5     | TopCandidates population, Score_IA ranking, z(x) vector construction, F_stable                                                        |
+| `ObjectiveFunctionTests`           | 4     | Objective function component correctness                                                                                              |
+| `ConformanceCheckingServiceTests`  | 4     | Petri-net token-based replay, Conform(x) for conflict-free/room-capacity/group-double-booking/empty timetables                        |
+| `SraServiceTests`                  | 3     | OLS/ridge weight adaptation, simplex projection                                                                                       |
+| `MockDatasetGeneratorTests`        | 3     | Determinism, count verification, compatibility score bounds                                                                           |
 
 ---
 

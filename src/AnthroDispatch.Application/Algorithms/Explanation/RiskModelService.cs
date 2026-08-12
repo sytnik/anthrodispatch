@@ -18,7 +18,7 @@ public sealed class RiskModelService
     {
         var rConflict = metrics.FTech < 1.0 ? 1.0 - metrics.FTech : 0.0;
         var rStress = 1.0 - metrics.FPsych;
-        var rCognitive = 1.0 - metrics.FCogn;
+        var rCognitive = metrics.CInterf; // C_interf(x) — negative pairs only (§2.2/§2.4), not 1-FCogn
         var rChange = fStable.HasValue ? 1.0 - fStable.Value : 0.0; // 0 for initial optimization
 
         return Delta1 * rConflict
