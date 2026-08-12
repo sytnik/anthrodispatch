@@ -79,8 +79,10 @@ public sealed class CpcGaService
 
         population = population.OrderByDescending(t => t.Metrics!.F).ToList();
         var bestTimetable = population[0];
+        var topCandidates = population.Take(_options.TopMCandidates).ToList();
         return new OptimizationResult(bestTimetable, bestTimetable.Metrics!, history, history.Count,
             timeToF075 < 0 ? sw.Elapsed.TotalSeconds : timeToF075,
-            timeToF065 < 0 ? sw.Elapsed.TotalSeconds : timeToF065);
+            timeToF065 < 0 ? sw.Elapsed.TotalSeconds : timeToF065,
+            topCandidates);
     }
 }

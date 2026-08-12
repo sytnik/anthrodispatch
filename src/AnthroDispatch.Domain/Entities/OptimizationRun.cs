@@ -18,5 +18,14 @@ public sealed class OptimizationRun
     public int Generations { get; set; }
     public double TimeToF075Seconds { get; set; }
     public string TimetableJson { get; set; } = "{}";
+
+    /// <summary>
+    /// X_cand ranked by Score_IA (dissertation §2.4) — serialized
+    /// List&lt;RankedCandidateDto&gt;, computed once at run time and cached
+    /// here (Score_IA depends only on data already in memory during the
+    /// optimization run, not on anything that changes afterward).
+    /// </summary>
+    public string CandidatesJson { get; set; } = "[]";
+
     public DateTime CreatedAt { get; init; } = DateTime.UtcNow;
 }

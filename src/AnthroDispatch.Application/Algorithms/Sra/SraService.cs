@@ -6,6 +6,8 @@ namespace AnthroDispatch.Application.Algorithms.Sra;
 public sealed class SraService
 {
     private const double EmaAlpha = 0.4;
+    private const double RidgeMu = 0.1;
+    private const int RidgeSampleThreshold = 50;
 
     public SraResult Adapt(
         List<TimetableMetrics> samples,
@@ -35,12 +37,22 @@ public sealed class SraService
         });
         var vector = Vector<double>.Build.DenseOfArray(q);
 
-        // OLS: beta = (X'X)^-1 X'y
+        // N >= 50: plain OLS, beta = (X'X)^-1 X'y
+        // N <  50: ridge regression, beta = (X'X + mu*I)^-1 X'y (mu=0.1), to
+        // stabilise the estimate on small samples. The intercept (column 0) is
+        // not regularised, per standard ridge practice (only the four objective
+        // weight coefficients are shrunk).
         var transpose = matrix.Transpose();
         Vector<double> beta;
         try
         {
-            beta = (transpose * matrix).Inverse() * (transpose * vector);
+            var gram = transpose * matrix;
+            if (n < RidgeSampleThreshold)
+            {
+                var ridge = Matrix<double>.Build.DenseDiagonal(5, 5, i => i == 0 ? 0.0 : RidgeMu);
+                gram += ridge;
+            }
+            beta = gram.Inverse() * (transpose * vector);
         }
         catch
         {

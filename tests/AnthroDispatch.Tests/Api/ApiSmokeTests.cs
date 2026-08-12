@@ -99,6 +99,37 @@ public class ApiSmokeTests
     }
 
     [Test]
+    public async Task CandidatesEndpoint_ShouldReturnRankedCandidatesSortedByScoreIa()
+    {
+        var (_, runId) = await EnsureDatasetAndRun();
+        var resp = await _client.GetAsync($"/api/optimization/{runId}/candidates");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync();
+        body.Should().Contain("scoreIa");
+
+        var doc = JsonDocument.Parse(body);
+        var candidates = doc.RootElement.GetProperty("candidates").EnumerateArray().ToList();
+        candidates.Should().NotBeEmpty();
+
+        var scores = candidates.Select(c => c.GetProperty("scoreIa").GetDouble()).ToList();
+        scores.Should().BeInDescendingOrder();
+        candidates[0].GetProperty("rank").GetInt32().Should().Be(1);
+    }
+
+    [Test]
+    public async Task ConformanceEndpoint_ShouldReturnConformScore()
+    {
+        var (_, runId) = await EnsureDatasetAndRun();
+        var resp = await _client.GetAsync($"/api/optimization/{runId}/conformance");
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await resp.Content.ReadAsStringAsync();
+        body.Should().Contain("conform");
+
+        var doc = JsonDocument.Parse(body);
+        doc.RootElement.GetProperty("conform").GetDouble().Should().BeInRange(0.0, 1.0);
+    }
+
+    [Test]
     public async Task WhatIfEndpoint_ShouldReturnDeltaMetrics()
     {
         var (_, runId) = await EnsureDatasetAndRun(); // todo

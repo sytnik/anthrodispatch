@@ -17,6 +17,8 @@ app.MapHealthEndpoints();
 app.MapDatasetEndpoints();
 app.MapOptimizationEndpoints();
 app.MapExplanationEndpoints();
+app.MapScoreIaEndpoints();
+app.MapConformanceEndpoints();
 app.MapWhatIfEndpoints();
 app.MapSraEndpoints();
 app.MapExperimentEndpoints();

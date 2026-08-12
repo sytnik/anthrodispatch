@@ -1,7 +1,9 @@
 ﻿using System.Text.Json;
+using AnthroDispatch.Application.Algorithms.Explanation;
 using AnthroDispatch.Application.Algorithms.Genetic;
 using AnthroDispatch.Application.Algorithms.Objective;
 using AnthroDispatch.Application.Algorithms.Repair;
+using AnthroDispatch.Application.Algorithms.ScoreIa;
 using AnthroDispatch.Domain.Entities;
 using AnthroDispatch.Domain.Enums;
 using AnthroDispatch.Domain.Metrics;
@@ -98,6 +100,30 @@ public static class OptimizationEndpoints
                     repair, options).Run(weights)
             };
 
+            // X_cand ranked by Score_IA (§2.4) — computed here while
+            // groups/instructors/disciplines/compatibilities are already in
+            // memory; no "previous approved version" concept exists in this
+            // request flow yet, so FStable is scored against previous=null
+            // (ScoreIaService treats that as fully stable — nothing to
+            // destabilise on a first-ever dispatch).
+            var explanationSvc = new ExplanationService(groups, instructors, disciplines, compatibilities);
+            var scoreIaSvc = new ScoreIaService(explanationSvc);
+            var ranked = scoreIaSvc.RankCandidates(result.TopCandidates ?? [result.BestTimetable]);
+            var candidatesJson = JsonSerializer.Serialize(ranked.Select((r, i) => new RankedCandidateDto(
+                Rank: i + 1,
+                TimetableId: r.Timetable.Id,
+                Classes: r.Timetable.Classes.Select(c => new ScheduledClassDto(
+                    c.Id, c.AssignmentId, c.GroupId, c.InstructorId, c.DisciplineId, c.RoomId,
+                    c.Slot.Day, c.Slot.Period)).ToList(),
+                FTech: r.Z.FTech,
+                FCirc: r.Z.FCirc,
+                FPsych: r.Z.FPsych,
+                FCogn: r.Z.FCogn,
+                FStable: r.Z.FStable,
+                Risk: r.Z.Risk,
+                Explainability: r.Z.Explainability,
+                ScoreIa: r.ScoreIa)));
+
             var run = new OptimizationRun
             {
                 DatasetId = req.DatasetId,
@@ -116,7 +142,8 @@ public static class OptimizationEndpoints
                     c.Id, c.AssignmentId, c.GroupId, c.InstructorId, c.DisciplineId, c.RoomId,
                     c.Slot.Day,
                     c.Slot.Period
-                }))
+                })),
+                CandidatesJson = candidatesJson
             };
             await db.OptimizationRuns.AddAsync(run, ct);
             await db.SaveChangesAsync(ct);
@@ -132,7 +159,8 @@ public static class OptimizationEndpoints
                 fCogn = run.FCogn,
                 conflicts = run.Conflicts,
                 generations = run.Generations,
-                timeToF075Seconds = run.TimeToF075Seconds
+                timeToF075Seconds = run.TimeToF075Seconds,
+                candidatesRanked = ranked.Count
             });
         }).WithName("RunOptimization").WithTags("Optimization");
 

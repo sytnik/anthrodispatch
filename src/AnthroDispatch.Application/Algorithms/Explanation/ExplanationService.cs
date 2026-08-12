@@ -196,4 +196,51 @@ public sealed class ExplanationService(
 
         return new TimetableExplanation(timetable.Id, strengths, weaknesses, recommendations, scores);
     }
+
+    /// <summary>
+    /// Explainability(x) (dissertation §2.4): fraction of scheduled classes
+    /// for which at least one non-trivial reason with a positive criterion
+    /// contribution can be cited — circadian activity above the midpoint of
+    /// [0,1], absence of a hard conflict at the slot, or positive cognitive
+    /// compatibility with the immediately preceding class of the same
+    /// group/day. The 0.5 "above midpoint" threshold for circadian activity
+    /// is an implementation choice (not numerically specified in the text).
+    /// </summary>
+    public double ComputeExplainability(Timetable timetable)
+    {
+        if (timetable.Classes.Count == 0) return 0.0;
+        var positiveCount = timetable.Classes.Count(sc => HasPositiveContribution(timetable, sc));
+        return (double)positiveCount / timetable.Classes.Count;
+    }
+
+    private bool HasPositiveContribution(Timetable timetable, ScheduledClass sc)
+    {
+        var group = groups.FirstOrDefault(g => g.Id == sc.GroupId);
+        var instructor = instructors.FirstOrDefault(i => i.Id == sc.InstructorId);
+
+        var gActivity = group != null ? CircadianActivityCalculator.Calculate(group.Chronotype, sc.Slot.Period) : 0.5;
+        var iActivity = instructor != null
+            ? CircadianActivityCalculator.Calculate(instructor.Chronotype, sc.Slot.Period)
+            : 0.5;
+        if (0.6 * gActivity + 0.4 * iActivity >= 0.5) return true;
+
+        var groupConflict = timetable.Classes.Any(c => c != sc && c.GroupId == sc.GroupId && c.Slot == sc.Slot);
+        var instrConflict =
+            timetable.Classes.Any(c => c != sc && c.InstructorId == sc.InstructorId && c.Slot == sc.Slot);
+        if (!groupConflict && !instrConflict) return true;
+
+        var dayClasses = timetable.Classes
+            .Where(c => c.GroupId == sc.GroupId && c.Slot.Day == sc.Slot.Day)
+            .OrderBy(c => c.Slot.Period).ToList();
+        var pos = dayClasses.IndexOf(sc);
+        if (pos > 0)
+        {
+            var prev = dayClasses[pos - 1];
+            var compat = _compatibilities.FirstOrDefault(c =>
+                c.FromDisciplineId == prev.DisciplineId && c.ToDisciplineId == sc.DisciplineId);
+            if (compat != null && compat.Score > 0) return true;
+        }
+
+        return false;
+    }
 }
