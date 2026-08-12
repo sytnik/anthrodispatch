@@ -145,7 +145,7 @@ public static class WhatIfEndpoints
         var compatibilities = await db.CognitiveCompatibilities.ToListAsync(ct);
 
         var objFn = new ObjectiveFunctionService(groups, instructors, disciplines, rooms, assignments, compatibilities);
-        var repair = new RepairService(rooms, instructors);
+        var repair = new RepairService(rooms, instructors, groups, assignments);
         var svc = new WhatIfService(objFn, repair);
         var weights = new ObjectiveWeights { Tech = 0.25, Circ = 0.25, Psych = 0.25, Cogn = 0.25 };
 

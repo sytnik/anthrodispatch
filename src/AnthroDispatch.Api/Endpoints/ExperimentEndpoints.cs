@@ -40,7 +40,7 @@ public static class ExperimentEndpoints
                 {
                     var objFn = new ObjectiveFunctionService(groups, instructors, disciplines, rooms, assignments,
                         compatibilities);
-                    var repair = new RepairService(rooms, instructors);
+                    var repair = new RepairService(rooms, instructors, groups, assignments);
                     var opts = new GaOptions
                     {
                         PopulationSize = req.PopulationSize,

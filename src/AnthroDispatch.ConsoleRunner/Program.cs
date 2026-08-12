@@ -123,7 +123,7 @@ static async Task RunOptimize(int seed, int pop, int gen, string algo)
 
     var weights = ObjectiveWeights.Default;
     var objFn = new ObjectiveFunctionService(groups, instructors, disciplines, rooms, assignments, compat);
-    var repair = new RepairService(rooms, instructors);
+    var repair = new RepairService(rooms, instructors, groups, assignments);
     var opts = new GaOptions { PopulationSize = pop, MaxGenerations = gen, Seed = seed };
 
     var result = algo.ToUpperInvariant() switch
@@ -170,7 +170,7 @@ static async Task RunAblation(int seed, int pop, int gen, int runs)
         for (var r = 0; r < runs; r++)
         {
             var objFn = new ObjectiveFunctionService(groups, instructors, disciplines, rooms, assignments, compat);
-            var repair = new RepairService(rooms, instructors);
+            var repair = new RepairService(rooms, instructors, groups, assignments);
             var opts = new GaOptions { PopulationSize = pop, MaxGenerations = gen, Seed = seed + r };
 
             var optResult = algName switch

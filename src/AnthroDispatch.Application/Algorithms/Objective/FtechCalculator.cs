@@ -70,33 +70,46 @@ public static class FtechCalculator
         {
             if (!roomDict.TryGetValue(sc.RoomId, out var room)) continue;
 
-            // 4. Room capacity violation — legacy single-group
-            if (groupDict.TryGetValue(sc.GroupId, out var group) && group.StudentCount > room.Capacity)
-                conflicts++;
-
-            // RoomCapacityGroupSetViolation — offline/blended multi-group
-            if (!sc.IsOnline() && sc.GroupIds.Count > 0)
+            // 4/5. Capacity and room-type checks only apply to physical
+            // (non-online) classes — real-data fix 2026-08-12 (ported from
+            // the University integration, Shared/Logic/AnthroDispatch):
+            // the legacy single-group capacity check and BOTH room-type
+            // checks previously ran unconditionally, unlike the multi-group
+            // capacity check below which already exempted online classes.
+            // With a real deployment where most classes run online and room
+            // profiles are sparse/defaulted, that inconsistency made
+            // Laboratory-type assignments unfixably flagged even when
+            // taught remotely.
+            if (!sc.IsOnline())
             {
-                var totalStudents = sc.GroupIds.Sum(gid =>
-                    groupDict.TryGetValue(gid, out var g) ? g.StudentCount : 0);
-                if (totalStudents > room.Capacity) conflicts++;
-            }
+                // 4. Room capacity violation — legacy single-group
+                if (groupDict.TryGetValue(sc.GroupId, out var group) && group.StudentCount > room.Capacity)
+                    conflicts++;
 
-            // 5. Room type mismatch — legacy ClassType from assignment
-            if (assignmentDict.TryGetValue(sc.AssignmentId, out var assignment))
-            {
-                if (assignment.ClassType == ClassType.Laboratory &&
+                // RoomCapacityGroupSetViolation — offline/blended multi-group
+                if (sc.GroupIds.Count > 0)
+                {
+                    var totalStudents = sc.GroupIds.Sum(gid =>
+                        groupDict.TryGetValue(gid, out var g) ? g.StudentCount : 0);
+                    if (totalStudents > room.Capacity) conflicts++;
+                }
+
+                // 5. Room type mismatch — legacy ClassType from assignment
+                if (assignmentDict.TryGetValue(sc.AssignmentId, out var assignment))
+                {
+                    if (assignment.ClassType == ClassType.Laboratory &&
+                        room.Type != RoomType.Laboratory &&
+                        room.Type != RoomType.ComputerLab)
+                        conflicts++;
+                }
+
+                // RoomTypeLessonTypeMismatch — new LessonType field
+                if (sc.LessonType == LessonType.Laboratory &&
                     room.Type != RoomType.Laboratory &&
-                    room.Type != RoomType.ComputerLab)
+                    room.Type != RoomType.ComputerLab &&
+                    room.Type != RoomType.Online)
                     conflicts++;
             }
-
-            // RoomTypeLessonTypeMismatch — new LessonType field
-            if (sc.LessonType == LessonType.Laboratory &&
-                room.Type != RoomType.Laboratory &&
-                room.Type != RoomType.ComputerLab &&
-                room.Type != RoomType.Online)
-                conflicts++;
         }
 
         // 6. Too many classes per instructor per day (> MaxClassesPerDay)
