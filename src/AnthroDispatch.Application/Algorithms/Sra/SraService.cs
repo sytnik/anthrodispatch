@@ -12,15 +12,19 @@ public sealed class SraService
     public SraResult Adapt(
         List<TimetableMetrics> samples,
         ObjectiveWeights oldWeights,
-        int seed = 42)
+        int seed = 42,
+        double noiseStdDev = 0.25)
     {
         var rng = new Random(seed);
 
-        // Generate satisfaction scores from the expert reference model + noise
+        // Generate satisfaction scores from the expert reference model + noise. noiseStdDev
+        // defaults to 0.25 (unchanged production behavior); a caller running a feedback-noise
+        // sensitivity analysis (article revision, reviewer request) can pass a higher value to
+        // simulate highly inconsistent/unreliable participant responses.
         var q = samples.Select(m =>
         {
             var signal = 1 + 4 * (0.15 * m.FTech + 0.30 * m.FCirc + 0.35 * m.FPsych + 0.20 * m.FCogn);
-            var noise = SampleNormal(rng, 0, 0.25);
+            var noise = SampleNormal(rng, 0, noiseStdDev);
             return Math.Clamp(signal + noise, 1.0, 5.0);
         }).ToArray();
 

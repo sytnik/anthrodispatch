@@ -1,0 +1,36 @@
+
+Algorithm      F100     F500     t(F>0.65),min    t(F>0.75),min    σ       
+----------------------------------------------------------------------
+  [NSGA2] run 12/30 done, F=0.5991
+  [NSGA2] run 10/30 done, F=0.5866
+  [NSGA2] run 7/30 done, F=0.5864
+  [NSGA2] run 5/30 done, F=0.5884
+  [NSGA2] run 6/30 done, F=0.5887
+  [NSGA2] run 16/30 done, F=0.5918
+  [NSGA2] run 28/30 done, F=0.5922
+  [NSGA2] run 15/30 done, F=0.5883
+  [NSGA2] run 24/30 done, F=0.5899
+  [NSGA2] run 2/30 done, F=0.5889
+  [NSGA2] run 26/30 done, F=0.5913
+  [NSGA2] run 23/30 done, F=0.5890
+  [NSGA2] run 3/30 done, F=0.5875
+  [NSGA2] run 20/30 done, F=0.5928
+  [NSGA2] run 27/30 done, F=0.5870
+  [NSGA2] run 17/30 done, F=0.5861
+  [NSGA2] run 25/30 done, F=0.5907
+  [NSGA2] run 11/30 done, F=0.5856
+  [NSGA2] run 1/30 done, F=0.5871
+  [NSGA2] run 18/30 done, F=0.5845
+  [NSGA2] run 19/30 done, F=0.5869
+  [NSGA2] run 30/30 done, F=0.5851
+  [NSGA2] run 9/30 done, F=0.5879
+  [NSGA2] run 21/30 done, F=0.5801
+  [NSGA2] run 13/30 done, F=0.5990
+  [NSGA2] run 22/30 done, F=0.5825
+  [NSGA2] run 14/30 done, F=0.6051
+  [NSGA2] run 8/30 done, F=0.6032
+  [NSGA2] run 4/30 done, F=0.5995
+  [NSGA2] run 29/30 done, F=0.5804
+  [NSGA2] component means: FTech=0.7313 FCirc=0.6061 FPsych=0.4971 FCogn=0.5244
+  [NSGA2] F100=0.5891±0.0046 F500=0.5897±0.0060 t065=3.4±1.7 t075=3.4±1.7
+NSGA2          0.589    0.590    3.4              3.4              0.006   

@@ -2,6 +2,7 @@
 using AnthroDispatch.Application.Algorithms.Genetic;
 using AnthroDispatch.Application.Algorithms.Objective;
 using AnthroDispatch.Application.Algorithms.Repair;
+using AnthroDispatch.Application.Algorithms.Sra;
 using AnthroDispatch.Application.DataPreparation;
 using AnthroDispatch.Domain.Entities;
 using AnthroDispatch.Domain.Enums;
@@ -14,6 +15,14 @@ var pop = GetArg(args, "--pop", 50);
 var gen = GetArg(args, "--gen", 100);
 var runs = GetArg(args, "--runs", 5);
 var algo = GetArgStr(args, "--algorithm", "AMD");
+// Dataset-scale overrides: defaults keep prior fast-dev behavior (8/12/14/8) unchanged for
+// existing callers; pass --groups 18 --instructors 60 --disciplines 42 --rooms 25 to reproduce
+// the "Algorithmic verification" dataset scale reported in the article (§4.4).
+var dsGroups = GetArg(args, "--groups", 8);
+var dsInstructors = GetArg(args, "--instructors", 12);
+var dsDisciplines = GetArg(args, "--disciplines", 14);
+var dsRooms = GetArg(args, "--rooms", 8);
+var algoFilter = GetArgStr(args, "--algorithms", "");
 
 switch (command.ToLowerInvariant())
 {
@@ -21,10 +30,13 @@ switch (command.ToLowerInvariant())
         await RunGenerate(seed);
         break;
     case "optimize":
-        await RunOptimize(seed, pop, gen, algo);
+        await RunOptimize(seed, pop, gen, algo, dsGroups, dsInstructors, dsDisciplines, dsRooms);
         break;
     case "ablation":
-        await RunAblation(seed, pop, gen, runs);
+        await RunAblation(seed, pop, gen, runs, dsGroups, dsInstructors, dsDisciplines, dsRooms, algoFilter);
+        break;
+    case "sra-sensitivity":
+        RunSraSensitivity(seed);
         break;
     default:
         PrintHelp();
@@ -43,14 +55,14 @@ static async Task<(List<AcademicGroup> groups,
         List<Room> rooms,
         List<TeachingAssignment> assignments,
         List<CognitiveCompatibility> compat)>
-    BuildGaInputs(int seed)
+    BuildGaInputs(int seed, int dsGroups = 8, int dsInstructors = 12, int dsDisciplines = 14, int dsRooms = 8)
 {
     var generator = new AnthroDispatchMockDataGenerator();
     var opts = new AnthroDispatchGenerationOptions(
         Seed: seed, AcademicYears: 2, Departments: 4, Degrees: 2,
         EducationalPrograms: 3, CurriculumPlans: 3, Terms: 4,
-        Groups: 8, StudentsApprox: 160, Instructors: 12,
-        Disciplines: 14, Rooms: 8);
+        Groups: dsGroups, StudentsApprox: dsGroups * 20, Instructors: dsInstructors,
+        Disciplines: dsDisciplines, Rooms: dsRooms);
     var dataset = await generator.GenerateAsync(opts);
 
     var builder = new DispatchInputBuilder();
@@ -117,9 +129,11 @@ static async Task RunGenerate(int seed)
     Console.WriteLine($"  Horizon: days={problem.Horizon.Days}, periods/day={problem.Horizon.PeriodsPerDay}");
 }
 
-static async Task RunOptimize(int seed, int pop, int gen, string algo)
+static async Task RunOptimize(int seed, int pop, int gen, string algo,
+    int dsGroups = 8, int dsInstructors = 12, int dsDisciplines = 14, int dsRooms = 8)
 {
-    var (groups, instructors, disciplines, rooms, assignments, compat) = await BuildGaInputs(seed);
+    var (groups, instructors, disciplines, rooms, assignments, compat) =
+        await BuildGaInputs(seed, dsGroups, dsInstructors, dsDisciplines, dsRooms);
 
     var weights = ObjectiveWeights.Default;
     var objFn = new ObjectiveFunctionService(groups, instructors, disciplines, rooms, assignments, compat);
@@ -134,6 +148,8 @@ static async Task RunOptimize(int seed, int pop, int gen, string algo)
             .Run(weights),
         "AWMGA" => new AwmGaService(groups, instructors, disciplines, rooms, assignments, compat, objFn, repair, opts)
             .Run(weights),
+        "NSGA2" or "NSGAII" => new NsgaIIService(groups, instructors, disciplines, rooms, assignments, compat, objFn,
+            repair, opts).Run(weights),
         _ => new BaselineGaService(groups, instructors, disciplines, rooms, assignments, compat, objFn, repair, opts)
             .Run(weights)
     };
@@ -149,12 +165,17 @@ static async Task RunOptimize(int seed, int pop, int gen, string algo)
     Console.WriteLine($"  t(F>0.75)   = {result.TimeToF075Seconds / 60.0:F1} min");
 }
 
-static async Task RunAblation(int seed, int pop, int gen, int runs)
+static async Task RunAblation(int seed, int pop, int gen, int runs,
+    int dsGroups = 8, int dsInstructors = 12, int dsDisciplines = 14, int dsRooms = 8, string algoFilter = "")
 {
-    var (groups, instructors, disciplines, rooms, assignments, compat) = await BuildGaInputs(seed);
+    var (groups, instructors, disciplines, rooms, assignments, compat) =
+        await BuildGaInputs(seed, dsGroups, dsInstructors, dsDisciplines, dsRooms);
 
     var weights = ObjectiveWeights.Default;
-    var algos = new[] { "BaselineGA", "CpcGA", "AwmGA", "AMD" };
+    var allAlgos = new[] { "BaselineGA", "CpcGA", "AwmGA", "AMD", "NSGA2" };
+    var algos = string.IsNullOrWhiteSpace(algoFilter)
+        ? allAlgos
+        : algoFilter.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
     Console.WriteLine(
         $"\n{"Algorithm",-14} {"F100",-8} {"F500",-8} {"t(F>0.65),min",-16} {"t(F>0.75),min",-16} {"σ",-8}");
@@ -162,12 +183,20 @@ static async Task RunAblation(int seed, int pop, int gen, int runs)
 
     foreach (var algName in algos)
     {
-        var fitnesses = new List<double>();
-        var f100List = new List<double>();
-        var tToF065 = new List<double>();
-        var tToF075 = new List<double>();
+        // Runs are independent (each builds its own ObjFn/Repair/GaOptions/RNG from a distinct
+        // seed) and only read the shared groups/instructors/disciplines/rooms/assignments/compat
+        // input lists, never mutate them — safe to parallelize across all available cores instead
+        // of running 30 independent trials sequentially.
+        var fitnesses = new double[runs];
+        var f100Arr = new double[runs];
+        var tToF065 = new double[runs];
+        var tToF075 = new double[runs];
+        var fTechArr = new double[runs];
+        var fCircArr = new double[runs];
+        var fPsychArr = new double[runs];
+        var fCognArr = new double[runs];
 
-        for (var r = 0; r < runs; r++)
+        Parallel.For(0, runs, r =>
         {
             var objFn = new ObjectiveFunctionService(groups, instructors, disciplines, rooms, assignments, compat);
             var repair = new RepairService(rooms, instructors, groups, assignments);
@@ -181,25 +210,132 @@ static async Task RunAblation(int seed, int pop, int gen, int runs)
                     opts).Run(weights),
                 "AwmGA" => new AwmGaService(groups, instructors, disciplines, rooms, assignments, compat, objFn, repair,
                     opts).Run(weights),
+                "NSGA2" => new NsgaIIService(groups, instructors, disciplines, rooms, assignments, compat, objFn,
+                    repair, opts).Run(weights),
                 _ => new BaselineGaService(groups, instructors, disciplines, rooms, assignments, compat, objFn, repair,
                     opts).Run(weights)
             };
 
-            fitnesses.Add(optResult.BestMetrics.F);
-            f100List.Add(optResult.FitnessHistory.Count >= 100
+            fitnesses[r] = optResult.BestMetrics.F;
+            f100Arr[r] = optResult.FitnessHistory.Count >= 100
                 ? optResult.FitnessHistory[99]
-                : optResult.BestMetrics.F);
-            tToF065.Add(optResult.TimeToF065Seconds / 60.0);
-            tToF075.Add(optResult.TimeToF075Seconds / 60.0);
+                : optResult.BestMetrics.F;
+            tToF065[r] = optResult.TimeToF065Seconds / 60.0;
+            tToF075[r] = optResult.TimeToF075Seconds / 60.0;
+            fTechArr[r] = optResult.BestMetrics.FTech;
+            fCircArr[r] = optResult.BestMetrics.FCirc;
+            fPsychArr[r] = optResult.BestMetrics.FPsych;
+            fCognArr[r] = optResult.BestMetrics.FCogn;
+
+            Console.WriteLine($"  [{algName}] run {r + 1}/{runs} done, F={optResult.BestMetrics.F:F4}");
+        });
+
+        static double StdOf(double[] xs)
+        {
+            if (xs.Length <= 1) return 0;
+            var m = xs.Average();
+            return Math.Sqrt(xs.Average(v => (v - m) * (v - m)));
         }
 
         var mean = fitnesses.Average();
-        var std = fitnesses.Count > 1 ? Math.Sqrt(fitnesses.Average(v => (v - mean) * (v - mean))) : 0;
-        var f100 = f100List.Average();
+        var std = StdOf(fitnesses);
+        var f100 = f100Arr.Average();
+        var f100Std = StdOf(f100Arr);
         var t065 = tToF065.Where(x => x >= 0).DefaultIfEmpty(0).Average();
+        var t065Std = StdOf(tToF065.Where(x => x >= 0).ToArray());
         var tAvg = tToF075.Where(x => x >= 0).DefaultIfEmpty(0).Average();
+        var tAvgStd = StdOf(tToF075.Where(x => x >= 0).ToArray());
+        Console.WriteLine(
+            $"  [{algName}] component means: FTech={fTechArr.Average():F4} FCirc={fCircArr.Average():F4} " +
+            $"FPsych={fPsychArr.Average():F4} FCogn={fCognArr.Average():F4}");
+        Console.WriteLine(
+            $"  [{algName}] F100={f100:F4}±{f100Std:F4} F500={mean:F4}±{std:F4} " +
+            $"t065={t065:F1}±{t065Std:F1} t075={tAvg:F1}±{tAvgStd:F1}");
 
         Console.WriteLine($"{algName,-14} {f100,-8:F3} {mean,-8:F3} {t065,-16:F1} {tAvg,-16:F1} {std,-8:F3}");
+    }
+}
+
+/// <summary>
+/// SRA feedback-noise/sparsity sensitivity analysis (article revision, Reviewer 1 request):
+/// how does the SRA weight-adaptation regression degrade when post-semester feedback is (a)
+/// missing (fewer respondents than expected) or (b) highly inconsistent (noisier/less reliable
+/// ratings) relative to the well-conditioned baseline? Reports distance-to-reference and
+/// correlation-to-reference (both already computed by SraService against w* = (0.15,0.30,0.35,0.20),
+/// the same reference vector used in §3.4/§4.7 of the article) across repeated trials per
+/// condition, mean ± SD.
+/// </summary>
+static void RunSraSensitivity(int seed)
+{
+    const int baselineN = 80; // above the N=50 ridge threshold, so the baseline uses plain OLS
+    const int reps = 50;
+    var svc = new SraService();
+    var oldWeights = ObjectiveWeights.Default;
+
+    List<TimetableMetrics> BuildSamples(int count, int sampleSeed)
+    {
+        var rng = new Random(sampleSeed);
+        return Enumerable.Range(0, count)
+            .Select(_ => new TimetableMetrics
+            {
+                FTech = rng.NextDouble(),
+                FCirc = rng.NextDouble(),
+                FPsych = rng.NextDouble(),
+                FCogn = rng.NextDouble()
+            })
+            .ToList();
+    }
+
+    (double distMean, double distStd, double corrMean, double corrStd) RunCondition(
+        int n, double noiseStdDev)
+    {
+        var dists = new List<double>();
+        var corrs = new List<double>();
+        for (var r = 0; r < reps; r++)
+        {
+            var trialSeed = seed + r;
+            var samples = BuildSamples(n, trialSeed);
+            var result = svc.Adapt(samples, oldWeights, trialSeed, noiseStdDev);
+            dists.Add(result.DistanceToReference);
+            corrs.Add(result.CorrelationToReference);
+        }
+
+        var dMean = dists.Average();
+        var dStd = Math.Sqrt(dists.Average(x => (x - dMean) * (x - dMean)));
+        var cMean = corrs.Average();
+        var cStd = Math.Sqrt(corrs.Average(x => (x - cMean) * (x - cMean)));
+        return (dMean, dStd, cMean, cStd);
+    }
+
+    Console.WriteLine($"\nSRA feedback sensitivity analysis (baseline N={baselineN}, {reps} reps/condition, seed={seed})");
+    Console.WriteLine(
+        $"{"Condition",-28} {"N",-6} {"noise σ",-9} {"dist(mean±SD)",-18} {"corr(mean±SD)",-18}");
+    Console.WriteLine(new string('-', 82));
+
+    var missingConditions = new (string Label, double Fraction)[]
+    {
+        ("Baseline (0% missing)", 0.0),
+        ("10% missing", 0.10),
+        ("20% missing", 0.20)
+    };
+    foreach (var (label, frac) in missingConditions)
+    {
+        var n = (int)Math.Round(baselineN * (1 - frac));
+        var (dMean, dStd, cMean, cStd) = RunCondition(n, 0.25);
+        Console.WriteLine($"{label,-28} {n,-6} {"0.25",-9} {$"{dMean:F4} ± {dStd:F4}",-18} {$"{cMean:F4} ± {cStd:F4}",-18}");
+    }
+
+    var noiseConditions = new (string Label, double NoiseStdDev)[]
+    {
+        ("Baseline (σ=0.25)", 0.25),
+        ("Moderate inconsistency (σ=0.375)", 0.375),
+        ("Severe inconsistency (σ=0.50)", 0.50)
+    };
+    foreach (var (label, noiseStdDev) in noiseConditions)
+    {
+        var (dMean, dStd, cMean, cStd) = RunCondition(baselineN, noiseStdDev);
+        Console.WriteLine(
+            $"{label,-28} {baselineN,-6} {noiseStdDev,-9:F3} {$"{dMean:F4} ± {dStd:F4}",-18} {$"{cMean:F4} ± {cStd:F4}",-18}");
     }
 }
 
@@ -207,8 +343,14 @@ static void PrintHelp()
 {
     Console.WriteLine("AnthroDispatch Console Runner");
     Console.WriteLine("  generate  [--seed N]");
-    Console.WriteLine("  optimize  [--seed N] [--pop N] [--gen N] [--algorithm BaselineGA|CpcGA|AwmGA|AMD]");
+    Console.WriteLine("  optimize  [--seed N] [--pop N] [--gen N] [--algorithm BaselineGA|CpcGA|AwmGA|AMD|NSGA2]");
+    Console.WriteLine("            [--groups N] [--instructors N] [--disciplines N] [--rooms N]");
     Console.WriteLine("  ablation  [--seed N] [--pop N] [--gen N] [--runs N]");
+    Console.WriteLine("            [--groups N] [--instructors N] [--disciplines N] [--rooms N]");
+    Console.WriteLine("  sra-sensitivity [--seed N]");
+    Console.WriteLine("  Dataset-scale defaults are the small fast-dev set (8/12/14/8);");
+    Console.WriteLine("  pass --groups 18 --instructors 60 --disciplines 42 --rooms 25 to match the");
+    Console.WriteLine("  article's \"Algorithmic verification\" dataset (§4.4).");
 }
 
 static int GetArg(string[] args, string key, int def)
